@@ -8,6 +8,8 @@ class Entry:
         self.type = self._define_type()
         self.descriptor = self._define_descriptor()
         self.meta = self._get_meta()
+        self.stage = None
+        self.pot = None
 
     @staticmethod
     def _get_name(entry: str, return_hash=True):
