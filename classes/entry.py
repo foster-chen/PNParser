@@ -63,8 +63,8 @@ class Entry:
         elif self.descriptor == "show":
             cards = self.raw.split(" a ")[1][:-1].replace(" ", "")
             return self._parse_cards(cards)
-        elif self.descriptor in ["end", "start"]:
-            return int(re.search(r'\d+', self.raw).group())
+        elif self.descriptor == "start":
+            return re.search(r'\(id:\s*(\w+)\)', self.raw).group(1)
         elif self.descriptor == "stack count":
             return self._parse_stacks(self.raw)
         elif self.descriptor == "add stack":
