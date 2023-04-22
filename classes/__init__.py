@@ -1,11 +1,11 @@
 from .entry import Entry
 from .hand import Hand
-from .me import Me
+from .player_self import PlayerSelf
 from .player import Player
 
 __all__ = [
     'Entry',
     'Hand',
-    'Me',
+    'PlayerSelf',
     'Player'
 ]
