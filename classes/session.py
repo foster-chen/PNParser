@@ -4,7 +4,8 @@ from tools import hand_segmentor
 
 class Session:
     def __init__(self) -> None:
-        pass
+        self.hands = None
+        self.players = None
 
     def load_entries(self, entries: Union[list[Entry], list[str]]):
         if isinstance(entries[0], str):
@@ -15,5 +16,14 @@ class Session:
         breakpoint()
         self.hands = [Hand(hand) for hand in hands]
 
-    def __getitem__(self, index):
-        return self.hands[index]
+    def __getitem__(self, index: Union[str, int]):
+        if isinstance(index, int):
+            return self.hands[index]
+        elif isinstance(index, str):
+            for hand in self.hands:
+                if hand.id == index:
+                    return hand
+            raise IndexError(f"Hand ID {index} not found in session")
+        else:
+            raise IndexError("Index with hand number of hand ID")
+
