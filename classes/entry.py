@@ -5,22 +5,15 @@ class Entry:
     def __init__(self, entry: str) -> None:
         self.raw = entry
         self.name = self._get_name(self.raw)
-        self.type = self._define_type()
         self.descriptor = self._define_descriptor()
         self.meta = self._get_meta()
         self.stage = None
         self.pot = None
-
+        
     @staticmethod
     def _get_name(entry: str, return_hash=True):
         full_names = re.findall(r'"([^"]*)"', entry)
         return [full_name.split(" @ ") for full_name in full_names] if return_hash else [[full_name.split(" @ ")[0]] for full_name in full_names]
-     
-    def _define_type(self):
-        if len(self.name) == 1:
-            return "action"
-        else:
-            return "event"
         
     def _define_descriptor(self):
         descriptor_lookup = {
@@ -46,7 +39,7 @@ class Entry:
             "stack from": "add stack",#
             "adding": "add stack",#
             "approved the player": "join",#
-            "enqueued": "terminate"#
+            "enqueued": "terminate",#
         }
         for key, descriptor in descriptor_lookup.items():
             if key in self.raw:
@@ -111,4 +104,4 @@ class Entry:
         return stacks
             
     def __str__(self) -> str:
-        return f"{self.type} entry. {self.descriptor}. {self.meta}"
+        return f"{self.name} {self.descriptor} {self.meta}"

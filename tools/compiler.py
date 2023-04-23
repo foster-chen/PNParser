@@ -10,15 +10,12 @@ from typing import Union
 import re
 
 from classes import Entry, Hand
+from .segmentor import hand_segmentor
 
-log_dir = "data/poker_now_log_pglOQ-rWNflPZLm3su2DufFm6.csv"
-
-log_df = pd.read_csv(log_dir)
-
-# log_df.iloc[120:154]
-print(log_df.iloc[50][0])
-
-def _get_name(entry: str):
-    full_name = re.findall(r'"([^"]*)"', entry)
-    name = full_name.split("@")
-
+def load_entries_from_csv(path: str, return_as_entry=True) -> list[Hand]:
+    log_df = pd.read_csv(path)
+    entry_lists = [log_df.iloc[:, 0].tolist()[::-1]][0]  # list of log entries in chronological order
+    if return_as_entry:
+        return [Entry(entry) for entry in entry_lists]
+    else:
+        return entry_lists

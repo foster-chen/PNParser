@@ -6,7 +6,10 @@ class Hand:
         self.entries = entries
         assert self.entries[0].descriptor == "start"
         self.id = self.entries[0].meta
-        self.dealer = self.entries[0].name[0]
+        try:
+            self.dealer = self.entries[0].name[0]
+        except IndexError:
+            self.dealer = None
         self._init_attributes()
 
         _stage = "preflop"
@@ -24,7 +27,8 @@ class Hand:
                 self.num_players = len(entry.name)
             elif entry.descriptor == "collect":
                 self.pot = entry.meta
-            
+                self.winner = entry.name
+
             if entry.descriptor in ["SB", "BB", "fold", "call", "bet", "raise"]:
                 if len(self.players) < self.num_players:
                     self.players.append(entry.name)
@@ -42,7 +46,7 @@ class Hand:
                     self.bet_history[bet_history_index]["bet"][entry.name[0][0]] = entry.meta + self.ante
                 else:
                     self.bet_history[bet_history_index]["bet"][entry.name[0][0]] += entry.meta
-                
+   
                 bet_history_index += 1
         self._parse_bet_history()
                 
@@ -73,7 +77,7 @@ class Hand:
         self.revealed_holdings = dict()
         self.players = []
         self.vpip = []
-        self.wtsd = []   
+        self.wtsd = []
 
     def _parse_bet_history(self):
         preflop = dict()
@@ -89,13 +93,13 @@ class Hand:
                 turn[i] = self.bet_history[i]
             elif bet_stage["stage"] == "river":
                 river[i] = self.bet_history[i]
-        
+
         # preflop analysis
         preflop_bet_to_reach = self.bb + self.ante
         # preflop_bet_to_reach = sum(list(preflop[0]["bet"].items()))
-        preflop_lead = self.players[1]  # the big blind
+        preflop_lead = None
         self._describe_bet_stage(0, None, "start")
-
+        preflop_callers = []
         for i, stage in preflop.items():
             if i == 0:
                 continue
@@ -115,7 +119,7 @@ class Hand:
                 preflop_lead = stage_lead
                 preflop_bet_to_reach = stage["bet"][stage_lead]
             else:
-                self._describe_bet_stage(i, self._identify_caller(preflop[i]["bet"], preflop[i - 1]["bet"]), "call")
+                self._describe_bet_stage(i, self._identify_change(preflop[i]["bet"], preflop[i - 1]["bet"]), "call")
 
             # if max(list(stage["bet"].items()))
         # print(f"preflop: {preflop}\nflop: {flop}\nturn: {turn}\nriver: {river}")
@@ -124,11 +128,20 @@ class Hand:
         self.bet_history[i]["descriptor"] = {"name": name, "action": descriptor}
     
     @staticmethod
-    def _identify_caller(stage1, stage2):
+    def _identify_change(stage1, stage2):
         for key in stage1:
             if stage1[key] != stage2[key]:
                 return key
         return None
+    
+    @staticmethod
+    def _identify_folds(history: dict):
+        # for key, stage in history.items():
+        pass
 
+    
     def __getitem__(self, index):
         return self.entries[index]
+
+    def __str__(self):
+        return f"Hand {self.id}, won by {self.winner[0][0]}\n{self.bet_history}"
