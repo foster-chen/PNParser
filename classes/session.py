@@ -1,6 +1,6 @@
 from .hand import Entry, Hand
 from typing import Union
-from tools import hand_segmentor
+from .utils import hand_segmentor
 
 class Session:
     def __init__(self) -> None:

@@ -104,4 +104,4 @@ class Entry:
         return stacks
             
     def __str__(self) -> str:
-        return f"{self.name} {self.descriptor} {self.meta}"
+        return self.raw
