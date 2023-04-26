@@ -36,7 +36,10 @@ class Hand:
                 self.num_players = len(entry.name)
             elif entry.descriptor == "collect":
                 self.pot += entry.meta
-                self.winner[entry.name[0][0]] = entry.meta
+                try:
+                    self.winner[entry.name[0][0]] += entry.meta
+                except KeyError:
+                    self.winner[entry.name[0][0]] = entry.meta
             elif entry.descriptor == "own hand":
                 self.own_hand = entry.meta
             elif entry.descriptor == "show":
@@ -54,6 +57,7 @@ class Hand:
                     self.bet_history[0]["bet"][entry.name[0][0]] = self.ante
                 self.bet_history[0]["fold"] = []
             elif entry.descriptor in ["call", "bet", "raise"]:
+                self.vpip.append(entry.name[0][0])
                 self.bet_history[bet_history_index] = deepcopy(self.bet_history[bet_history_index - 1])
                 self.bet_history[bet_history_index]["fold"] = []
                 self.bet_history[bet_history_index]["stage"] = _stage
@@ -67,14 +71,19 @@ class Hand:
                     self.bet_history[bet_history_index]["bet"][entry.name[0][0]] = entry.meta
                 bet_history_index += 1
             elif entry.descriptor == "fold":
-                self.bet_history[bet_history_index - 1]["fold"].append(entry.name[0])
+                self.bet_history[bet_history_index - 1]["fold"].append(entry.name[0][0])
+        self.bet_history[max(self.bet_history) + 1] = dict(stage="end")
 
+        self.player_aggression_factor = {player[0]:{"attack": 0, "defend": 0} for player in self.players}
+        self.check_raise = {player[0]:0 for player in self.players}
+        self.call_without_checkraise = {player[0]:0 for player in self.players}
         self._parse_bet_history()
         self._get_pot_at_stage()
         self.board = self._get_board()
+        self.vpip = list(set(self.vpip))
     
     def _get_board(self):
-        first = self.flop[0] + self.turn[0] + self.river[0] + self.rabbit[0]
+        first = self.flop[0] + self.turn[0] + self.river[0]
         if self.river[1] and self.turn[1] and self.flop[1]:
             second = self.flop[1] + self.turn[1] + self.river[1]
         elif self.river[1] and self.turn[1]:
@@ -96,27 +105,35 @@ class Hand:
         self.turn = [[], []]
         self.river = [[], []]
         self.rabbit = [[]]
-        self.preflop_aggressor = None
         self.three_bet = None
         self.four_bet = None
+        self.five_bet = None
         self.c_bet = None
         self.double_barrel = None
-        self.tripple_barrel = None
+        self.triple_barrel = None
         self.pfr = None
-        self.check_raise = None
+        self.raise_against_c = None
+        self.raise_against_double = None
+        self.raise_against_triple = None
         self.bet_history = {0: dict(stage="preflop", bet=dict())}
-        self.player_af = dict()
         self.revealed_holdings = dict()
         self.players = []
         self.winner = dict()
         self.vpip = []
+        self.join_flop = []
         self.wtsd = []
-        self.f_three_bet = []
-        self.f_four_bet = []
-        self.f_pfr = []
+        self.fold_to_three_bet = []
+        self.fold_to_four_bet = []
+        self.fold_to_pfr = []
         self.fold_to_c = []
         self.fold_to_double = []
-        self.fold_to_tripple = []
+        self.fold_to_triple = []
+        self.call_three_bet = []
+        self.call_four_bet = []
+        self.call_pfr = []
+        self.call_c = []
+        self.call_double = []
+        self.call_triple = []
 
     def _get_pot_at_stage(self):
         preflop_last_layer = None
@@ -129,125 +146,208 @@ class Hand:
                 if not preflop_last_layer:
                     preflop_last_layer = i - 1
                 flop_last_layer = i - 1
-            elif history["stage"] == "river" and not turn_last_layer:
+            elif history["stage"] in ["river", "end"] and not turn_last_layer:
                 if not flop_last_layer:
                     flop_last_layer = i - 1
+                if not preflop_last_layer:
+                    preflop_last_layer = i - 1
                 turn_last_layer = i - 1
-        print(preflop_last_layer, flop_last_layer, turn_last_layer)
+        # print(preflop_last_layer, flop_last_layer, turn_last_layer)
         self._preflop_pot = sum(self.bet_history[preflop_last_layer]["bet"].values()) if preflop_last_layer \
-            else sum(self.bet_history[max(self.bet_history)]["bet"].values())
-        self._flop_pot = sum(self.bet_history[flop_last_layer]["bet"].values()) + self._preflop_pot if flop_last_layer else self._preflop_pot
-        self._turn_pot = sum(self.bet_history[turn_last_layer]["bet"].values()) + self._flop_pot if turn_last_layer else self._flop_pot
-        print(self._preflop_pot, self._flop_pot, self._turn_pot)
+            else sum(self.bet_history[max(self.bet_history) - 1]["bet"].values())
+        self._flop_pot = sum(self.bet_history[flop_last_layer]["bet"].values()) + self._preflop_pot if flop_last_layer and flop_last_layer != preflop_last_layer else self._preflop_pot
+        self._turn_pot = sum(self.bet_history[turn_last_layer]["bet"].values()) + self._flop_pot if turn_last_layer and turn_last_layer != flop_last_layer else self._flop_pot
+        # print(self._preflop_pot, self._flop_pot, self._turn_pot)
         
-
-
     def _parse_bet_history(self):
-        player_active = {player[0]: True for player in self.players}
 
         preflop_bet_to_reach = self.bb + self.ante
         flop_bet_to_reach = 0
         turn_bet_to_reach = 0
         river_bet_to_reach = 0
-        preflop_lead = None
-        flop_lead = None
-        turn_lead = None
-        river_lead = None
+        self.preflop_lead = None
+        self.flop_lead = None
+        self.turn_lead = None
+        self.river_lead = None
+        folds = []
+
+        _preflop_end_layer = None
+        _river_end_layer = None
         
         self._describe_bet_stage(0, None, "start")
         flop_start, turn_start, river_start = False, False, False
         for i, stage in self.bet_history.items():
-            if i == 0:
+            if stage["stage"] != "preflop" and not _preflop_end_layer \
+                        and len([name for name, bet in self.bet_history[i - 1]["bet"].items() if bet == preflop_bet_to_reach]) > 1:
+                _preflop_end_layer = i - 1
+            if not _river_end_layer and stage["stage"] == "end" and self.bet_history[i - 1]["stage"] == "river" \
+                        and len([name for name, bet in self.bet_history[i - 1]["bet"].items() if bet == river_bet_to_reach]) > 1:
+                _river_end_layer = i - 1
+
+            if i == 0 or i == max(self.bet_history):
                 continue
+            folds.extend(stage["fold"])
             stage_lead = max(stage["bet"], key=lambda k: stage["bet"][k])
             # analyze PFR, 3Bet, 4Bet, Fold to PFR, Fold to 3Bet, Fold to 4Bet on preflop
             if stage["stage"] == "preflop":
                 if stage["bet"][stage_lead] > preflop_bet_to_reach:
-                    if self.three_bet:
+                    if self.five_bet:
+                        self._describe_bet_stage(i, stage_lead, "5-Bet+")
+                    elif self.four_bet:
+                        self.five_bet = stage_lead
+                        self._describe_bet_stage(i, stage_lead, "5-Bet")
+                    elif self.three_bet:
                         self.four_bet = stage_lead
-                        self._describe_bet_stage(i, stage_lead, "four bet")
+                        self._describe_bet_stage(i, stage_lead, "4-Bet")
                     elif self.pfr:
                         self.three_bet = stage_lead
-                        self._describe_bet_stage(i, stage_lead, "three bet")
+                        self._describe_bet_stage(i, stage_lead, "3-Bet")
                     else:
                         self.pfr = stage_lead
-                        self._describe_bet_stage(i, stage_lead, "pfr")
+                        self._describe_bet_stage(i, stage_lead, "PFR")
 
-                    preflop_lead = stage_lead
+                    self.preflop_lead = stage_lead
                     preflop_bet_to_reach = stage["bet"][stage_lead]
                 else:
-                    self._describe_bet_stage(i, self._identify_change(self.bet_history[i]["bet"], self.bet_history[i - 1]["bet"]), "call")
+                    caller = self._identify_change(self.bet_history[i]["bet"], self.bet_history[i - 1]["bet"])
+                    if self.four_bet:
+                        self.call_four_bet.append(caller)
+                    elif self.three_bet:
+                        self.call_three_bet.append(caller)
+                    elif self.pfr:
+                        self.call_pfr.append(caller)
+                    self._describe_bet_stage(i, caller, "Call")
                 
                 if stage["fold"]:
                     if self.four_bet:
-                        self.f_four_bet.extend(stage["fold"])
+                        self.fold_to_four_bet.extend(stage["fold"])
                     elif self.three_bet:
-                        self.f_three_bet.extend(stage["fold"])
+                        self.fold_to_three_bet.extend(stage["fold"])
                     elif self.pfr:
-                        self.f_pfr.extend(stage["fold"])
+                        self.fold_to_pfr.extend(stage["fold"])
             # analyze C-bet, fold to C-bet on flop
             elif stage["stage"] == "flop":
                 if stage["bet"][stage_lead] > flop_bet_to_reach:
-                    if not flop_start and stage_lead == preflop_lead:
-                        self.c_bet = stage_lead
-                        flop_start = True
-                        self._describe_bet_stage(i, stage_lead, "C-bet")
-                    elif flop_lead and [player[0] for player in self.players].index(stage_lead) < [player[0] for player in self.players].index(flop_lead) and self.bet_history[i - 1]["bet"][stage_lead] == 0:
-                        self._describe_bet_stage(i, stage_lead, "check raise")
-                    elif flop_lead:
-                        self._describe_bet_stage(i, stage_lead, "raise")
+                    self.player_aggression_factor[stage_lead]["attack"] += 1
+                    if not flop_start:
+                        if stage_lead == self.preflop_lead:
+                            self.c_bet = stage_lead
+                            self._describe_bet_stage(i, stage_lead, "C-bet")
+                        elif self.pfr and [player[0] for player in self.players].index(stage_lead) < [player[0] for player in self.players].index(self.pfr):
+                            self._describe_bet_stage(i, stage_lead, "Donk")
+                        else:
+                            self._describe_bet_stage(i, stage_lead, "Bet")
+                    elif self.flop_lead and [player[0] for player in self.players].index(stage_lead) < [player[0] for player in self.players].index(self.flop_lead) \
+                                                        and self.bet_history[i - 1]["bet"][stage_lead] == 0:
+                        if not self.raise_against_c and self.c_bet:
+                            self.raise_against_c = stage_lead
+                        self.check_raise[stage_lead] += 1
+                        self._describe_bet_stage(i, stage_lead, "Check Raise")
+                    elif self.flop_lead:
+                        if not self.raise_against_c and self.c_bet:
+                            self.raise_against_c = stage_lead
+                        self._describe_bet_stage(i, stage_lead, "Raise")
                     else:
-                        self._describe_bet_stage(i, stage_lead, "bet")
-                    flop_lead = stage_lead
+                        self._describe_bet_stage(i, stage_lead, "Bet")
+                    self.flop_lead = stage_lead
                     flop_bet_to_reach = stage["bet"][stage_lead]
                 else:
-                    self._describe_bet_stage(i, self._identify_change(self.bet_history[i]["bet"], self.bet_history[i - 1]["bet"]), "call")
-
-                if stage["fold"]:
+                    caller = self._identify_change(self.bet_history[i]["bet"], self.bet_history[i - 1]["bet"])
+                    self.player_aggression_factor[caller]["defend"] += 1
+                    if self.flop_lead and [player[0] for player in self.players].index(caller) < [player[0] for player in self.players].index(self.flop_lead) \
+                                                        and self.bet_history[i - 1]["bet"][caller] == 0:
+                         self.call_without_checkraise[caller] += 1
                     if self.c_bet:
-                        self.fold_to_c.extend(stage["fold"])
+                        self.call_c.append(caller)
+                    self._describe_bet_stage(i, caller, "Call")
+                flop_start = True
+
+                if stage["fold"] and self.c_bet:
+                    self.fold_to_c.extend(stage["fold"])
+
             # analyze double-barrel, fold to double barrel on turn
             elif stage["stage"] == "turn":
                 if stage["bet"][stage_lead] > turn_bet_to_reach:
-                    if not turn_start and self.c_bet and stage_lead == self.c_bet:
-                        self.double_barrel = stage_lead
-                        turn_start = True
-                        self._describe_bet_stage(i, stage_lead, "double-barrel")
-                    elif turn_lead and [player[0] for player in self.players].index(stage_lead) < [player[0] for player in self.players].index(turn_lead) and self.bet_history[i - 1]["bet"][stage_lead] == 0:
-                        self._describe_bet_stage(i, stage_lead, "check raise")
-                    elif turn_lead:
-                        self._describe_bet_stage(i, stage_lead, "raise")
+                    self.player_aggression_factor[stage_lead]["attack"] += 1
+                    if not turn_start and self.c_bet:
+                        if stage_lead == self.c_bet:
+                            self.double_barrel = stage_lead
+                            self._describe_bet_stage(i, stage_lead, "Double Barrel")
+                        elif self.c_bet and [player[0] for player in self.players].index(stage_lead) < [player[0] for player in self.players].index(self.c_bet):
+                            self._describe_bet_stage(i, stage_lead, "Donk")
+                        else:
+                            self._describe_bet_stage(i, stage_lead, "Bet")
+                    elif self.turn_lead and [player[0] for player in self.players].index(stage_lead) < [player[0] for player in self.players].index(self.turn_lead) \
+                                         and self.bet_history[i - 1]["bet"][stage_lead] == 0:
+                        if not self.raise_against_double and self.double_barrel:
+                            self.raise_against_double = stage_lead
+                        self.check_raise[stage_lead] += 1
+                        self._describe_bet_stage(i, stage_lead, "Check Raise")
+                    elif self.turn_lead:
+                        if not self.raise_against_double and self.double_barrel:
+                            self.raise_against_double = stage_lead
+                        self._describe_bet_stage(i, stage_lead, "Raise")
                     else:
-                        self._describe_bet_stage(i, stage_lead, "bet")
-                    turn_lead = stage_lead
+                        self._describe_bet_stage(i, stage_lead, "Bet")
+                    self.turn_lead = stage_lead
                     turn_bet_to_reach = stage["bet"][stage_lead]
                 else:
-                    self._describe_bet_stage(i, self._identify_change(self.bet_history[i]["bet"], self.bet_history[i - 1]["bet"]), "call")
-
-                if stage["fold"]:
+                    caller = self._identify_change(self.bet_history[i]["bet"], self.bet_history[i - 1]["bet"])
+                    self.player_aggression_factor[caller]["defend"] += 1
+                    if self.turn_lead and [player[0] for player in self.players].index(caller) < [player[0] for player in self.players].index(self.turn_lead) \
+                                                        and self.bet_history[i - 1]["bet"][caller] == 0:
+                         self.call_without_checkraise[caller] += 1
                     if self.double_barrel:
-                        self.fold_to_double.extend(stage["fold"])
+                        self.call_double.append(caller)
+                    self._describe_bet_stage(i, caller, "Call")
+                turn_start = True
+
+                if stage["fold"] and self.double_barrel:
+                    self.fold_to_double.extend(stage["fold"])
+
             # analyze triple-barrel, fold to triple-barrel
             elif stage["stage"] == "river":
                 if stage["bet"][stage_lead] > river_bet_to_reach:
-                    if not river_start and self.double_barrel and stage_lead == self.double_barrel:
-                        self.tripple_barrel = stage_lead
-                        river_start = True
-                        self._describe_bet_stage(i, stage_lead, "triple-barrel")
-                    elif river_lead and [player[0] for player in self.players].index(stage_lead) < [player[0] for player in self.players].index(river_lead) and self.bet_history[i - 1]["bet"][stage_lead] == 0:
-                        self._describe_bet_stage(i, stage_lead, "check raise")
-                    elif river_lead:
-                        self._describe_bet_stage(i, stage_lead, "raise")
+                    self.player_aggression_factor[stage_lead]["attack"] += 1
+                    if not river_start and self.double_barrel:
+                        if stage_lead == self.double_barrel:
+                            self.triple_barrel = stage_lead
+                            self._describe_bet_stage(i, stage_lead, "Triple Barrel")
+                        elif self.double_barrel and [player[0] for player in self.players].index(stage_lead) < [player[0] for player in self.players].index(self.double_barrel):
+                            self._describe_bet_stage(i, stage_lead, "Donk")
+                        else:
+                            self._describe_bet_stage(i, stage_lead, "Bet")
+                    elif self.river_lead and [player[0] for player in self.players].index(stage_lead) < [player[0] for player in self.players].index(self.river_lead) and self.bet_history[i - 1]["bet"][stage_lead] == 0:
+                        if not self.raise_against_triple and self.triple_barrel:
+                            self.raise_against_triple = stage_lead
+                        self.check_raise[stage_lead] += 1
+                        self._describe_bet_stage(i, stage_lead, "Check Raise")
+                    elif self.river_lead:
+                        if not self.raise_against_triple and self.triple_barrel:
+                            self.raise_against_triple = stage_lead
+                        self._describe_bet_stage(i, stage_lead, "Raise")
                     else:
-                        self._describe_bet_stage(i, stage_lead, "bet")
-                    river_lead = stage_lead
+                        self._describe_bet_stage(i, stage_lead, "Bet")
+                    self.river_lead = stage_lead
                     river_bet_to_reach = stage["bet"][stage_lead]
                 else:
-                    self._describe_bet_stage(i, self._identify_change(self.bet_history[i]["bet"], self.bet_history[i - 1]["bet"]), "call")
+                    caller = self._identify_change(self.bet_history[i]["bet"], self.bet_history[i - 1]["bet"])
+                    self.player_aggression_factor[caller]["defend"] += 1
+                    if self.river_lead and [player[0] for player in self.players].index(caller) < [player[0] for player in self.players].index(self.river_lead) \
+                                                        and self.bet_history[i - 1]["bet"][caller] == 0:
+                         self.call_without_checkraise[caller] += 1
+                    if self.triple_barrel:
+                        self.call_triple.append(caller)
+                    self._describe_bet_stage(i, caller, "Call")
+                river_start = True
 
-                if stage["fold"]:
-                    if self.tripple_barrel:
-                        self.fold_to_tripple.extend(stage["fold"])
+                if stage["fold"] and self.triple_barrel:
+                    self.fold_to_triple.extend(stage["fold"])
+
+        if _preflop_end_layer:
+            self.join_flop.extend([name for name, bet in self.bet_history[_preflop_end_layer]["bet"].items() if bet == preflop_bet_to_reach])
+        if _river_end_layer:
+            self.wtsd.extend([name for name, bet in self.bet_history[_river_end_layer]["bet"].items() if bet == river_bet_to_reach])
 
 
             # if max(list(stage["bet"].items()))
@@ -274,7 +374,8 @@ class Hand:
 
         preflop_table = [[detail for detail in history["descriptor"].values()] for history in self.bet_history.values() if history["stage"] == "preflop"]
         for stage, history in zip(preflop_table, [history for history in self.bet_history.values() if history["stage"] == "preflop"]):
-            folds_this_round = [name[0] for name in history["fold"]]
+            history = deepcopy(history)
+            folds_this_round = [name for name in history["fold"]]
             for name in folds_this_round:
                 history["bet"][name] = COLOR.fold + str(history['bet'][name]) + COLOR.reset
             for name in folds:
@@ -290,7 +391,8 @@ class Hand:
 
         flop_table = [[detail for detail in history["descriptor"].values()] for history in self.bet_history.values() if history["stage"] == "flop"]
         for stage, history in zip(flop_table, [history for history in self.bet_history.values() if history["stage"] == "flop"]):
-            folds_this_round = [name[0] for name in history["fold"]]
+            history = deepcopy(history)
+            folds_this_round = [name for name in history["fold"]]
             for name in folds_this_round:
                 history["bet"][name] = COLOR.fold + str(history['bet'][name]) + COLOR.reset
             for name in folds:
@@ -312,7 +414,7 @@ class Hand:
                 out_content.append(tabulate(card_table, headers=["Pot", "flop"], tablefmt="rst"))
         if flop_table:
             out_content.append(tabulate(flop_table, headers=headers, tablefmt='orgtbl'))
-        elif self.flop:
+        elif self.flop[0]:
             check_around = [None, None]
             stats = [0 for _ in self.players]
             for name in folds:
@@ -321,7 +423,8 @@ class Hand:
 
         turn_table = [[detail for detail in history["descriptor"].values()] for history in self.bet_history.values() if history["stage"] == "turn"]
         for stage, history in zip(turn_table, [history for history in self.bet_history.values() if history["stage"] == "turn"]):
-            folds_this_round = [name[0] for name in history["fold"]]
+            history = deepcopy(history)
+            folds_this_round = [name for name in history["fold"]]
             for name in folds_this_round:
                 history["bet"][name] = COLOR.fold + str(history['bet'][name]) + COLOR.reset
             for name in folds:
@@ -352,7 +455,8 @@ class Hand:
 
         river_table = [[detail for detail in history["descriptor"].values()] for history in self.bet_history.values() if history["stage"] == "river"]
         for stage, history in zip(river_table, [history for history in self.bet_history.values() if history["stage"] == "river"]):
-            folds_this_round = [name[0] for name in history["fold"]]
+            history = deepcopy(history)
+            folds_this_round = [name for name in history["fold"]]
             for name in folds_this_round:
                 history["bet"][name] = COLOR.fold + str(history['bet'][name]) + COLOR.reset
             for name in folds:
@@ -367,9 +471,12 @@ class Hand:
                 if self.river[i]:
                     cards[i][2] = pretty_cards(*self.river[i])
             if all(card is None for card in cards[1]):
-                out_content.append(tabulate([cards[0]], headers=["Flop", "Turn", "River"], tablefmt="rst"))
+                out_content.append(tabulate([[self._turn_pot] + cards[0]], headers=["Pot", "Flop", "Turn", "River"], tablefmt="rst"))
             else:    
-                out_content.append(tabulate(cards, headers=["flop", "turn", "river"], tablefmt="rst"))
+                card_table = cards
+                card_table[0].insert(0, self._turn_pot)
+                card_table[1].insert(0, None)
+                out_content.append(tabulate(card_table, headers=["Pot", "flop", "turn", "river"], tablefmt="rst"))
         if river_table:
             out_content.append(tabulate(river_table, headers=headers, tablefmt='orgtbl'))
         elif self.river[0]:
@@ -382,11 +489,17 @@ class Hand:
             out_content.append("\n----- Show Down -----")
             if self.board[1]:
                 reveal_table = [[name, pretty_cards(*cards), f"{get_rank(self.board[0] + cards)[1]}({get_rank(self.board[0] + cards)[0]})", \
-                                 f"{get_rank(self.board[1] + cards)[1]}({get_rank(self.board[1] + cards)[0]})", self.winner.get(name, 0)] for name, cards in self.revealed_holdings.items()]
+                                 f"{get_rank(self.board[1] + cards)[1]}({get_rank(self.board[1] + cards)[0]})", self.winner.get(name, 0)] for name, \
+                                 cards in self.revealed_holdings.items()]
                 reveal_headers = ["Name", "Holdings", "Board 1", "Board 2", "Winnings"]
             else:
-                reveal_table = [[name, pretty_cards(*cards), f"{get_rank(self.board[0] + cards)[1]}({get_rank(self.board[0] + cards)[0]})", self.winner.get(name, 0)] for name, cards in self.revealed_holdings.items()]
-                reveal_headers = ["Name", "Holdings", "Board 1", "Winnings"]
+                try:
+                    reveal_table = [[name, pretty_cards(*cards), f"{get_rank(self.board[0] + cards)[1]}({get_rank(self.board[0] + cards)[0]})", \
+                                    self.winner.get(name, 0)] for name, cards in self.revealed_holdings.items()]
+                    reveal_headers = ["Name", "Holdings", "Board 1", "Winnings"]
+                except ValueError:
+                    reveal_table = [[name, pretty_cards(*cards), self.winner.get(name, 0)] for name, cards in self.revealed_holdings.items()]
+                    reveal_headers = ["Name", "Holdings", "Winnings"]
             for reveal in reveal_table:
                 if reveal[0] in folds:
                     reveal[0] = COLOR.dormant + reveal[0] + COLOR.reset
@@ -394,12 +507,17 @@ class Hand:
                     reveal[0] = COLOR.action_highlight + reveal[0] + COLOR.reset
             out_content.append(tabulate(reveal_table, headers=reveal_headers, tablefmt='grid'))
 
+        if self.board[1]:
+            out_content.append(tabulate([[pretty_cards(*self.board[0])], [pretty_cards(*self.board[1])]], headers=["Board"], tablefmt='rst'))
+        elif self.rabbit[0] and self.board[0]:
+            rabbit = [[pretty_cards(*self.board[0]), pretty_cards(*self.rabbit[0])]]
+            out_content.append(tabulate(rabbit, headers=["Board", "Rabbit"], tablefmt='rst'))
+        elif self.rabbit[0]:
+            out_content.append(tabulate([[pretty_cards(*self.rabbit[0])]], headers=["Rabbit"], tablefmt='rst'))
+        else:
+            out_content.append(tabulate([[pretty_cards(*self.board[0])]], headers=["Board"], tablefmt='rst'))
         out_content.append(tabulate([["Winner", ", ".join([name for name in self.winner])], ["Pot", self.pot]], tablefmt='grid'))
         return "\n".join(out_content)
-
-    def debug(self):
-        for key, item in self.bet_history.items():
-            print(key, item["stage"], item["descriptor"], item["bet"])
 
     def __getitem__(self, index):
         return self.entries[index]
