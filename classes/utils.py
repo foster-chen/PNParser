@@ -116,10 +116,11 @@ def raw_attributes():
     return attributes
 
 def player_attributes():
-    attributes = ["vpip",
-                  "wtsd",
+    attributes = ["name",
+                  "vpip",
                   "pfr",
                   "af",
+                  "wtsd",
                   "three_bet",
                   "four_bet",
                   "five_bet",
@@ -134,3 +135,23 @@ def player_attributes():
                   "fold_to_triple",
                   "check_raise",]
     return attributes
+
+def player_attribute_titles():
+    title = ["VPIP", 
+             "PFR", 
+             "AF",
+             "WTSD",
+             "3-Bet", 
+             "4-Bet", 
+             "5-Bet", 
+             "C-Bet", 
+             "2Ba", 
+             "3Ba", 
+             "F-PFR", 
+             "F-3B", 
+             "F-4B", 
+             "F-CB", 
+             "F-2Ba", 
+             "F-3Ba", 
+             "Trap"]
+    return title

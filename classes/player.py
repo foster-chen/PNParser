@@ -7,7 +7,6 @@ class Player:
     player_stats = player_attributes()
 
     def __init__(self, name) -> None:
-        self.name = name
         self.n_hands_tracked = 0
         for attribute in self.raw_stats:
             setattr(self, f"_{attribute}", 0)
@@ -15,6 +14,7 @@ class Player:
         self._defend = 0
         for attribute in self.player_stats:
             setattr(self, attribute, None)
+        self.name = name
 
     def reset(self):
         self.__init__(self.name)
@@ -50,6 +50,7 @@ class Player:
                  ["VPIP", f"{round(self.vpip * 100, 2)}%" if self.vpip else None],
                  ["PFR", f"{round(self.pfr * 100, 2)}%" if self.pfr else None],
                  ["AF", round(self.af, 2) if self.af else None],
+                 ["WTSD", round(self.af, 2) if self.af else None], 
                  ["3-Bet", f"{round(self.three_bet * 100, 2)}%" if self.three_bet else None],
                  ["4-Bet", f"{round(self.four_bet * 100, 2)}%" if self.four_bet else None],
                  ["5-Bet", f"{round(self.five_bet * 100, 2)}%" if self.five_bet else None],
@@ -68,6 +69,16 @@ class Player:
         
     def stat_api(self):
         return [getattr(self, attribute) for attribute in self.player_stats]
+
+    def raw_stat_api(self):
+        return [getattr(self, f"_{attribute}") for attribute in self.raw_stats]
+
+    def print_raw(self):
+        for attribute in self.raw_stats:
+            print(f"{attribute}: {getattr(self, f'_{attribute}')}")
+
+
+    
     
 
         

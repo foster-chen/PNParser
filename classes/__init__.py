@@ -9,5 +9,5 @@ __all__ = [
     'Hand',
     'PlayerSelf',
     'Player',
-    'Session'
+    'Session',
 ]
