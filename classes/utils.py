@@ -1,17 +1,16 @@
 import pandas as pd
-import os
-from prettytable import PrettyTable
-import argparse
 from treys import Evaluator
 from treys.lookup import LookupTable
 from phevaluator import evaluate_cards
 from phevaluator.card import Card
 from typing import Union
-import re
 from . import Entry
 from colorama import Fore, Style
 
 class EntryList(list):
+    """ 
+    a list subclass for easier entry printing
+    """
     def __init__(self, lst: list):
         super(EntryList, self).__init__(lst)
         
@@ -25,6 +24,11 @@ class COLOR:
     reset = Style.RESET_ALL
 
 def pretty_cards(*cards: Union[int, str, Card]):
+    """_summary_
+
+    Returns:
+        _type_: _description_
+    """
 
     cards = [Card(id) for id in list(map(Card.to_id, cards))]
     
@@ -72,7 +76,7 @@ def hand_segmentor(entries: list[Union[str, Entry]], return_admin=False):
     else:
         return hands_list[1:]
 
-def get_rank(cards, return_readable_rank=True):
+def get_rank(cards, return_readable_rank=True) -> str:
     _evaluator = Evaluator()
     rank = evaluate_cards(*cards)
     if return_readable_rank:
@@ -155,3 +159,13 @@ def player_attribute_titles():
              "F-3Ba", 
              "Trap"]
     return title
+
+def describe_holdings(hand: list):
+    assert len(hand) == 2 and isinstance(hand[0], Card)
+    card1, card2 = hand
+    if card1.id_ // 4 == card2.id_ // 4:
+        return f"{card1.describe_rank()}{card2.describe_rank()}"
+    elif card1.id_ // 4 > card2.id_ // 4:
+        return f"{card1.describe_rank()}{card2.describe_rank()}{'o' if card1.describe_suit() != card2.describe_suit() else 's'}"
+    else:
+        return f"{card2.describe_rank()}{card1.describe_rank()}{'o' if card1.describe_suit() != card2.describe_suit() else 's'}"

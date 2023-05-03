@@ -17,29 +17,29 @@ class Entry:
         
     def _define_descriptor(self):
         descriptor_lookup = {
-            "checks": "check",#
-            "calls": "call",#
-            "folds": "fold",#
-            "bets": "bet",#
-            "raises": "raise",#
-            "Uncalled": "uncalled",#
-            "Undealt cards": "rabbit",#
-            "shows a": "show",#
-            "ending hand": "end",#
-            "starting hand": "start",#
-            "Player stacks": "stack count",#
-            "collected": "collect",#
-            "Your hand": "own hand",#
-            "ante": "ANTE",#
-            "posts a small": "SB",#
-            "posts a big": "BB",#
-            "Flop": "flop",#
-            "Turn": "turn",#
-            "River": "river",#
-            "stack from": "add stack",#
-            "adding": "add stack",#
-            "approved the player": "join",#
-            "enqueued": "terminate",#
+            "checks": "check",
+            "calls": "call",
+            "folds": "fold",
+            "bets": "bet",
+            "raises": "raise",
+            "Uncalled": "uncalled",
+            "Undealt cards": "rabbit",
+            "shows a": "show",
+            "ending hand": "end",
+            "starting hand": "start",
+            "Player stacks": "stack count",
+            "collected": "collect",
+            "Your hand": "own hand",
+            "ante": "ANTE",
+            "posts a small": "SB",
+            "posts a big": "BB",
+            "Flop": "flop",
+            "Turn": "turn",
+            "River": "river",
+            "stack from": "add stack",
+            "adding": "add stack",
+            "approved the player": "join",
+            "enqueued": "terminate",
         }
         for key, descriptor in descriptor_lookup.items():
             if key in self.raw:

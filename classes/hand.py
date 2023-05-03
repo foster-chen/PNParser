@@ -2,19 +2,26 @@ from .entry import Entry
 from copy import deepcopy
 from collections import OrderedDict
 from tabulate import tabulate
-from .utils import pretty_cards, COLOR, get_rank, EntryList
-
+from .utils import pretty_cards, COLOR, get_rank, EntryList, raw_attributes
 
 class Hand:
     def __init__(self, entries: list[Entry]) -> None:
         self.entries = EntryList(entries)
         assert self.entries[0].descriptor == "start"
         self.id = self.entries[0].meta
+        self.own_player_id = None
         try:
             self.dealer = self.entries[0].name[0]
         except IndexError:
             self.dealer = None
+
         self._init_attributes()
+        for entry in self.entries:
+            if entry.descriptor in ["SB", "BB", "fold", "call", "bet", "raise"]:
+                if entry.name[0][0] not in self.players:
+                    self.players.append(entry.name[0][0])
+                    self.num_players += 1
+        self.bet_history = {0: dict(stage="preflop", bet={name: 0 for name in self.players})}
 
         _stage = "preflop"
         bet_history_index = 1
@@ -31,9 +38,6 @@ class Hand:
 
             if entry.descriptor == "rabbit":
                 getattr(self, entry.descriptor)[0] = entry.meta
-            elif entry.descriptor == "stack count":
-                self.starting_stack = entry.meta
-                self.num_players = len(entry.name)
             elif entry.descriptor == "collect":
                 self.pot += entry.meta
                 try:
@@ -44,10 +48,6 @@ class Hand:
                 self.own_hand = entry.meta
             elif entry.descriptor == "show":
                 self.revealed_holdings[entry.name[0][0]] = entry.meta
-
-            if entry.descriptor in ["SB", "BB", "fold", "call", "bet", "raise"]:
-                if len(self.players) < self.num_players:
-                    self.players.append(entry.name[0])
 
             if entry.descriptor in ["ANTE", "SB", "BB"]:
                 setattr(self, entry.descriptor.lower(), entry.meta)
@@ -74,9 +74,9 @@ class Hand:
                 self.bet_history[bet_history_index - 1]["fold"].append(entry.name[0][0])
         self.bet_history[max(self.bet_history) + 1] = dict(stage="end")
 
-        self.player_aggression_factor = {player[0]:{"attack": 0, "defend": 0} for player in self.players}
-        self.check_raise = {player[0]:0 for player in self.players}
-        self.call_without_checkraise = {player[0]:0 for player in self.players}
+        self.player_aggression_factor = {player:{"attack": 0, "defend": 0} for player in self.players}
+        self.check_raise = {player:0 for player in self.players}
+        self.call_without_checkraise = {player:0 for player in self.players}
         self._parse_bet_history()
         self._get_pot_at_stage()
         self.board = self._get_board()
@@ -100,6 +100,7 @@ class Hand:
         self.ante = 0
         self.sb = 0
         self.bb = 0
+        self.num_players = 0
         self.own_hand = None
         self.flop = [[], []]
         self.turn = [[], []]
@@ -115,7 +116,6 @@ class Hand:
         self.raise_against_c = None
         self.raise_against_double = None
         self.raise_against_triple = None
-        self.bet_history = {0: dict(stage="preflop", bet=dict())}
         self.revealed_holdings = dict()
         self.players = []
         self.winner = dict()
@@ -152,15 +152,12 @@ class Hand:
                 if not preflop_last_layer:
                     preflop_last_layer = i - 1
                 turn_last_layer = i - 1
-        # print(preflop_last_layer, flop_last_layer, turn_last_layer)
         self._preflop_pot = sum(self.bet_history[preflop_last_layer]["bet"].values()) if preflop_last_layer \
             else sum(self.bet_history[max(self.bet_history) - 1]["bet"].values())
         self._flop_pot = sum(self.bet_history[flop_last_layer]["bet"].values()) + self._preflop_pot if flop_last_layer and flop_last_layer != preflop_last_layer else self._preflop_pot
         self._turn_pot = sum(self.bet_history[turn_last_layer]["bet"].values()) + self._flop_pot if turn_last_layer and turn_last_layer != flop_last_layer else self._flop_pot
-        # print(self._preflop_pot, self._flop_pot, self._turn_pot)
         
     def _parse_bet_history(self):
-
         preflop_bet_to_reach = self.bb + self.ante
         flop_bet_to_reach = 0
         turn_bet_to_reach = 0
@@ -232,17 +229,17 @@ class Hand:
                     if not flop_start:
                         if stage_lead == self.preflop_lead:
                             self.c_bet = stage_lead
-                            self._describe_bet_stage(i, stage_lead, "C-bet")
-                        elif self.pfr and [player[0] for player in self.players].index(stage_lead) < [player[0] for player in self.players].index(self.pfr):
+                            self._describe_bet_stage(i, stage_lead, "C-Bet")
+                        elif self.pfr and [player for player in self.players].index(stage_lead) < [player for player in self.players].index(self.pfr):
                             self._describe_bet_stage(i, stage_lead, "Donk")
                         else:
                             self._describe_bet_stage(i, stage_lead, "Bet")
-                    elif self.flop_lead and [player[0] for player in self.players].index(stage_lead) < [player[0] for player in self.players].index(self.flop_lead) \
+                    elif self.flop_lead and [player for player in self.players].index(stage_lead) < [player for player in self.players].index(self.flop_lead) \
                                                         and self.bet_history[i - 1]["bet"][stage_lead] == 0:
                         if not self.raise_against_c and self.c_bet:
                             self.raise_against_c = stage_lead
                         self.check_raise[stage_lead] += 1
-                        self._describe_bet_stage(i, stage_lead, "Check Raise")
+                        self._describe_bet_stage(i, stage_lead, "Check-Raise")
                     elif self.flop_lead:
                         if not self.raise_against_c and self.c_bet:
                             self.raise_against_c = stage_lead
@@ -254,7 +251,7 @@ class Hand:
                 else:
                     caller = self._identify_change(self.bet_history[i]["bet"], self.bet_history[i - 1]["bet"])
                     self.player_aggression_factor[caller]["defend"] += 1
-                    if self.flop_lead and [player[0] for player in self.players].index(caller) < [player[0] for player in self.players].index(self.flop_lead) \
+                    if self.flop_lead and [player for player in self.players].index(caller) < [player for player in self.players].index(self.flop_lead) \
                                                         and self.bet_history[i - 1]["bet"][caller] == 0:
                          self.call_without_checkraise[caller] += 1
                     if self.c_bet:
@@ -272,17 +269,17 @@ class Hand:
                     if not turn_start and self.c_bet:
                         if stage_lead == self.c_bet:
                             self.double_barrel = stage_lead
-                            self._describe_bet_stage(i, stage_lead, "Double Barrel")
-                        elif self.c_bet and [player[0] for player in self.players].index(stage_lead) < [player[0] for player in self.players].index(self.c_bet):
+                            self._describe_bet_stage(i, stage_lead, "2-Barrel")
+                        elif self.c_bet and [player for player in self.players].index(stage_lead) < [player for player in self.players].index(self.c_bet):
                             self._describe_bet_stage(i, stage_lead, "Donk")
                         else:
                             self._describe_bet_stage(i, stage_lead, "Bet")
-                    elif self.turn_lead and [player[0] for player in self.players].index(stage_lead) < [player[0] for player in self.players].index(self.turn_lead) \
+                    elif self.turn_lead and [player for player in self.players].index(stage_lead) < [player for player in self.players].index(self.turn_lead) \
                                          and self.bet_history[i - 1]["bet"][stage_lead] == 0:
                         if not self.raise_against_double and self.double_barrel:
                             self.raise_against_double = stage_lead
                         self.check_raise[stage_lead] += 1
-                        self._describe_bet_stage(i, stage_lead, "Check Raise")
+                        self._describe_bet_stage(i, stage_lead, "Check-Raise")
                     elif self.turn_lead:
                         if not self.raise_against_double and self.double_barrel:
                             self.raise_against_double = stage_lead
@@ -294,7 +291,7 @@ class Hand:
                 else:
                     caller = self._identify_change(self.bet_history[i]["bet"], self.bet_history[i - 1]["bet"])
                     self.player_aggression_factor[caller]["defend"] += 1
-                    if self.turn_lead and [player[0] for player in self.players].index(caller) < [player[0] for player in self.players].index(self.turn_lead) \
+                    if self.turn_lead and [player for player in self.players].index(caller) < [player for player in self.players].index(self.turn_lead) \
                                                         and self.bet_history[i - 1]["bet"][caller] == 0:
                          self.call_without_checkraise[caller] += 1
                     if self.double_barrel:
@@ -312,16 +309,16 @@ class Hand:
                     if not river_start and self.double_barrel:
                         if stage_lead == self.double_barrel:
                             self.triple_barrel = stage_lead
-                            self._describe_bet_stage(i, stage_lead, "Triple Barrel")
-                        elif self.double_barrel and [player[0] for player in self.players].index(stage_lead) < [player[0] for player in self.players].index(self.double_barrel):
+                            self._describe_bet_stage(i, stage_lead, "3-Barrel")
+                        elif self.double_barrel and [player for player in self.players].index(stage_lead) < [player for player in self.players].index(self.double_barrel):
                             self._describe_bet_stage(i, stage_lead, "Donk")
                         else:
                             self._describe_bet_stage(i, stage_lead, "Bet")
-                    elif self.river_lead and [player[0] for player in self.players].index(stage_lead) < [player[0] for player in self.players].index(self.river_lead) and self.bet_history[i - 1]["bet"][stage_lead] == 0:
+                    elif self.river_lead and [player for player in self.players].index(stage_lead) < [player for player in self.players].index(self.river_lead) and self.bet_history[i - 1]["bet"][stage_lead] == 0:
                         if not self.raise_against_triple and self.triple_barrel:
                             self.raise_against_triple = stage_lead
                         self.check_raise[stage_lead] += 1
-                        self._describe_bet_stage(i, stage_lead, "Check Raise")
+                        self._describe_bet_stage(i, stage_lead, "Check-Raise")
                     elif self.river_lead:
                         if not self.raise_against_triple and self.triple_barrel:
                             self.raise_against_triple = stage_lead
@@ -333,7 +330,7 @@ class Hand:
                 else:
                     caller = self._identify_change(self.bet_history[i]["bet"], self.bet_history[i - 1]["bet"])
                     self.player_aggression_factor[caller]["defend"] += 1
-                    if self.river_lead and [player[0] for player in self.players].index(caller) < [player[0] for player in self.players].index(self.river_lead) \
+                    if self.river_lead and [player for player in self.players].index(caller) < [player for player in self.players].index(self.river_lead) \
                                                         and self.bet_history[i - 1]["bet"][caller] == 0:
                          self.call_without_checkraise[caller] += 1
                     if self.triple_barrel:
@@ -349,10 +346,6 @@ class Hand:
         if _river_end_layer:
             self.wtsd.extend([name for name, bet in self.bet_history[_river_end_layer]["bet"].items() if bet == river_bet_to_reach])
 
-
-            # if max(list(stage["bet"].items()))
-        # print(f"preflop: {preflop}\nflop: {flop}\nturn: {turn}\nriver: {river}")
-
     def _describe_bet_stage(self, i, name, descriptor):
         self.bet_history[i]["descriptor"] = {"name": name, "action": descriptor}
     
@@ -367,8 +360,8 @@ class Hand:
     def _pretty_history(self):
         out_content = []
         headers = ["Action from", "Description"]
-        headers.extend([name[0] for name in self.players])
-        out_content.append(tabulate([["Hand", self.id], ["Holdings", pretty_cards(*self.own_hand) if self.own_hand else "Not recorded"]], tablefmt="grid"))
+        headers.extend([name for name in self.players])
+        out_content.append(tabulate([["Hand", self.id], ["SB:BB:ANTE", f"{self.sb}:{self.bb}:{self.ante}"], ["Holdings", pretty_cards(*self.own_hand) if self.own_hand else "Not recorded"]], tablefmt="grid"))
         cards = [[None, None, None], [None, None, None]]
         folds = []
 
@@ -386,7 +379,7 @@ class Hand:
                 history["bet"][history["descriptor"]["name"]] = COLOR.action_highlight + str(history["bet"][history["descriptor"]["name"]]) + COLOR.reset
             except KeyError:
                 pass
-            stage.extend([history["bet"][name[0]] for name in self.players])
+            stage.extend([history["bet"][name] for name in self.players])
         out_content.append(tabulate(preflop_table, headers=headers, tablefmt='orgtbl'))
 
         flop_table = [[detail for detail in history["descriptor"].values()] for history in self.bet_history.values() if history["stage"] == "flop"]
@@ -400,7 +393,7 @@ class Hand:
             folds.extend(folds_this_round)
             folds = list(set(folds))
             history["bet"][history["descriptor"]["name"]] = COLOR.action_highlight + str(history["bet"][history["descriptor"]["name"]]) + COLOR.reset
-            stage.extend([history["bet"][name[0]] for name in self.players])
+            stage.extend([history["bet"][name] for name in self.players])
         if self.flop[0]:
             for i in range(2):
                 if self.flop[i]:
@@ -418,7 +411,7 @@ class Hand:
             check_around = [None, None]
             stats = [0 for _ in self.players]
             for name in folds:
-                stats[[player[0] for player in self.players].index(name)] = COLOR.dormant + "0" + COLOR.reset
+                stats[[player for player in self.players].index(name)] = COLOR.dormant + "0" + COLOR.reset
             out_content.append(tabulate([check_around + stats], headers=headers, tablefmt='orgtbl'))
 
         turn_table = [[detail for detail in history["descriptor"].values()] for history in self.bet_history.values() if history["stage"] == "turn"]
@@ -432,7 +425,7 @@ class Hand:
             folds.extend(folds_this_round)
             folds = list(set(folds))
             history["bet"][history["descriptor"]["name"]] = COLOR.action_highlight + str(history["bet"][history["descriptor"]["name"]]) + COLOR.reset
-            stage.extend([history["bet"][name[0]] for name in self.players])
+            stage.extend([history["bet"][name] for name in self.players])
         if self.turn[0]:
             for i in range(2):
                 if self.turn[i]:
@@ -450,7 +443,7 @@ class Hand:
             check_around = [None, None]
             stats = [0 for _ in self.players]
             for name in folds:
-                stats[[player[0] for player in self.players].index(name)] = COLOR.dormant + "0" + COLOR.reset
+                stats[[player for player in self.players].index(name)] = COLOR.dormant + "0" + COLOR.reset
             out_content.append(tabulate([check_around + stats], headers=headers, tablefmt='orgtbl'))
 
         river_table = [[detail for detail in history["descriptor"].values()] for history in self.bet_history.values() if history["stage"] == "river"]
@@ -464,7 +457,7 @@ class Hand:
             folds.extend(folds_this_round)
             folds = list(set(folds))
             history["bet"][history["descriptor"]["name"]] = COLOR.action_highlight + str(history["bet"][history["descriptor"]["name"]]) + COLOR.reset
-            stage.extend([history["bet"][name[0]] for name in self.players])
+            stage.extend([history["bet"][name] for name in self.players])
 
         if self.river[0]:
             for i in range(2):
@@ -483,7 +476,7 @@ class Hand:
             check_around = [None, None]
             stats = [0 for _ in self.players]
             for name in folds:
-                stats[[player[0] for player in self.players].index(name)] = COLOR.dormant + "0" + COLOR.reset
+                stats[[player for player in self.players].index(name)] = COLOR.dormant + "0" + COLOR.reset
             out_content.append(tabulate([check_around + stats], headers=headers, tablefmt='orgtbl'))
         if self.revealed_holdings:
             out_content.append("\n----- Show Down -----")
@@ -524,3 +517,8 @@ class Hand:
 
     def __str__(self, pretty=True):
         return self._pretty_history if pretty else [entry.raw for entry in self]
+
+    def show_raw_stats(self):
+        lst = [getattr(self, attribute) for attribute in raw_attributes()]
+        for i, attribute in enumerate(raw_attributes()):
+            print(f"{attribute}: {lst[i]}")

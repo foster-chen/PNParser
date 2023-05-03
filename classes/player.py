@@ -1,10 +1,16 @@
-from .utils import raw_attributes, player_attributes
+from .utils import raw_attributes, player_attributes, describe_holdings
 from tabulate import tabulate
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from matplotlib import pyplot as plt
+from matplotlib.transforms import blended_transform_factory
 
 class Player:
 
     raw_stats = raw_attributes()
     player_stats = player_attributes()
+    _actions = ["Call", "Donk", "Bet", "Raise", "Check-Raise", "PFR", "3-Bet", "4-Bet", "5-Bet", "5-Bet+", "C-Bet", "2-Barrel", "3-Barrel"]
 
     def __init__(self, name) -> None:
         self.n_hands_tracked = 0
@@ -15,6 +21,7 @@ class Player:
         for attribute in self.player_stats:
             setattr(self, attribute, None)
         self.name = name
+        self.hands = dict()
 
     def reset(self):
         self.__init__(self.name)
@@ -76,9 +83,75 @@ class Player:
     def print_raw(self):
         for attribute in self.raw_stats:
             print(f"{attribute}: {getattr(self, f'_{attribute}')}")
-
-
     
+    def find_hands(self, *descriptor, position=None):
+        result = list()
+        for d in descriptor:
+            _result = list()
+            id_list = result if result else self.hands.keys()
+            if "|" in d:
+                ors = d.replace(" ", "").split("|")
+                for _d in ors:
+                    assert _d in self._actions, f"Supported search keyword:\n{self._actions}"
+                    for id in id_list:
+                        if _d in self.hands[id]["actions"]:
+                            if (position and self.hands[id]["position"][position] == 1) or not position:
+                                _result.append(id)
+
+                _result = list(set(_result))
+            else:
+                assert d in self._actions, f"Supported search keyword:\n{self._actions}"
+                for id in id_list:
+                    if d in self.hands[id]["actions"]:
+                        if (position and self.hands[id]["position"][position] == 1) or not position:
+                             _result.append(id)
+            result = _result
+        return result
     
+    def hand_chart(self, hand_ids, show_frequency=False):
+        hand_to_index = dict()
+        ranks = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"]
+        annotations = [[0 for _ in range(13)] for _ in range(13)]
+        result = np.array(annotations)
+        base_count = np.array(annotations)
+
+        for i in range(13):
+            for j in range(13):
+                if j > i:
+                    annotations[i][j] = f"{ranks[i]}{ranks[j]}s"
+                    hand_to_index[f"{ranks[i]}{ranks[j]}s"] = (i, j)
+                elif i > j:
+                    annotations[i][j] = f"{ranks[j]}{ranks[i]}o"
+                    hand_to_index[f"{ranks[j]}{ranks[i]}o"] = (i, j)
+                elif i == j:
+                    annotations[i][j] = f"{ranks[j]}{ranks[i]}"
+                    hand_to_index[f"{ranks[i]}{ranks[j]}"] = (i, j)
+
+        for id in hand_ids:
+            hand_type = describe_holdings(self.hands[id]["hand"])
+            result[hand_to_index[hand_type]] += 1
+
+        for id in self.hands:
+            hand_type = describe_holdings(self.hands[id]["hand"])
+            base_count[hand_to_index[hand_type]] += 1
+
+        if show_frequency:
+            for i in range(13):
+                for j in range(13):
+                    annotations[i][j] += f" {result[i, j]}/{base_count[i, j]}"
+
+        base_count[result == 0] = 1  # avoid DivideZeroError
+
+        fig, ax = plt.subplots(figsize=(13, 10))
+        sns.heatmap(result / base_count, annot=annotations, cmap=sns.cubehelix_palette(as_cmap=True), vmin=0, vmax=1, fmt='', annot_kws={'fontsize': 10 if show_frequency else 13}, ax=ax)
+        ax.set(xticks=[], yticks=[])
+        tf = blended_transform_factory(plt.gca().transAxes, plt.gca().transAxes)
+        plt.text(0.85, -0.05, f"{len(self.hands)} hands", fontsize=15, color='gray', transform=tf)
 
         
+
+# proportional_deviation = self.players_profile.div(list(self.players_profile["_average_"]), axis=0)
+#         hm = sns.heatmap(proportional_deviation, annot=self.players_profile, center=1, fmt='.3f', cmap="vlag", annot_kws={'fontsize':7}, vmin=-0.1, vmax=2, cbar=False)
+#         hm.set_xticklabels(hm.get_xticklabels(), rotation=45, ha='right', fontsize=9)
+#         tf = blended_transform_factory(plt.gca().transAxes, plt.gca().transAxes)
+#         plt.text(0.85, -0.25, f"{self.__len__()} hands", fontsize=10, color='gray', transform=tf)
