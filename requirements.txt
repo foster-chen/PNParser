@@ -1,0 +1,8 @@
+colorama
+matplotlib
+numpy
+pandas
+phevaluator
+seaborn
+tabulate
+treys

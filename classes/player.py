@@ -1,7 +1,6 @@
 from .utils import raw_attributes, player_attributes, describe_holdings
 from tabulate import tabulate
 import numpy as np
-import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
 from matplotlib.transforms import blended_transform_factory

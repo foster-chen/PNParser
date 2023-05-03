@@ -1,6 +1,5 @@
 from .entry import Entry
 from copy import deepcopy
-from collections import OrderedDict
 from tabulate import tabulate
 from .utils import pretty_cards, COLOR, get_rank, EntryList, raw_attributes
 
