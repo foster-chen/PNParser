@@ -1,2 +1,3 @@
 data/own
 .vscode
+__pycache__/
