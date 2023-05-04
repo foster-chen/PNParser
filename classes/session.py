@@ -208,23 +208,41 @@ class Session:
             if "|" in d:
                 ors = d.replace(" ", "").split("|")
                 for _d in ors:
-                    assert _d in self._actions, f"Supported search keyword:\n{self._actions}"
+                    if _d.startswith("!"):
+                        assert _d[1:] in self._actions, f"Supported search keyword:\n{self._actions}"
+                    else:
+                        assert _d in self._actions, f"Supported search keyword:\n{self._actions}"
                     for ele in hand_list:
-                        if isinstance(ele, Hand) \
+                        if isinstance(ele, Hand) and _d.startswith("!") \
+                        and _d[1:] not in [history["descriptor"]["action"] for history in ele.bet_history.values() if history["stage"] != "end"]:
+                            _result.append(ele.id)
+                        elif isinstance(ele, Hand) and not _d.startswith("!") \
                         and _d in [history["descriptor"]["action"] for history in ele.bet_history.values() if history["stage"] != "end"]:
                             _result.append(ele.id)
-                        elif isinstance(ele, str) \
+                        elif isinstance(ele, str) and _d.startswith("!") \
+                        and _d[1:] not in [history["descriptor"]["action"] for history in self[ele].bet_history.values() if history["stage"] != "end"]:
+                            _result.append(ele)
+                        elif isinstance(ele, str) and not _d.startswith("!") \
                         and _d in [history["descriptor"]["action"] for history in self[ele].bet_history.values() if history["stage"] != "end"]:
                             _result.append(ele)
                 _result = list(set(_result))
             else:
-                assert d in self._actions, f"Supported search keyword:\n{self._actions}"
+                if d.startswith("!"):
+                    assert d[1:] in self._actions, f"Supported search keyword:\n{self._actions}"
+                else:
+                    assert d in self._actions, f"Supported search keyword:\n{self._actions}"
                 for ele in hand_list:
-                    if isinstance(ele, Hand) \
-                        and d in [history["descriptor"]["action"] for history in ele.bet_history.values() if history["stage"] != "end"]:
-                            _result.append(ele.id)
-                    elif isinstance(ele, str) \
-                        and d in [history["descriptor"]["action"] for history in self[ele].bet_history.values() if history["stage"] != "end"]:
-                            _result.append(ele)
+                    if isinstance(ele, Hand) and d.startswith("!") \
+                    and d[1:] not in [history["descriptor"]["action"] for history in ele.bet_history.values() if history["stage"] != "end"]:
+                        _result.append(ele.id)
+                    elif isinstance(ele, Hand) and not d.startswith("!") \
+                    and d in [history["descriptor"]["action"] for history in ele.bet_history.values() if history["stage"] != "end"]:
+                        _result.append(ele.id)
+                    elif isinstance(ele, str) and d.startswith("!") \
+                    and d[1:] not in [history["descriptor"]["action"] for history in self[ele].bet_history.values() if history["stage"] != "end"]:
+                        _result.append(ele)
+                    elif isinstance(ele, str) and not d.startswith("!") \
+                    and d in [history["descriptor"]["action"] for history in self[ele].bet_history.values() if history["stage"] != "end"]:
+                        _result.append(ele)
             result = _result
         return result

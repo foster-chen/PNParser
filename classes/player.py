@@ -91,17 +91,29 @@ class Player:
             if "|" in d:
                 ors = d.replace(" ", "").split("|")
                 for _d in ors:
-                    assert _d in self._actions, f"Supported search keyword:\n{self._actions}"
+                    if _d.startswith("!"):
+                        assert _d[1:] in self._actions, f"Supported search keyword:\n{self._actions}"
+                    else:
+                        assert _d in self._actions, f"Supported search keyword:\n{self._actions}"
                     for id in id_list:
-                        if _d in self.hands[id]["actions"]:
+                        if _d.startswith("!") and _d[1:] not in self.hands[id]["actions"]:
                             if (position and self.hands[id]["position"][position] == 1) or not position:
                                 _result.append(id)
-
+                        elif not _d.startswith("!") and _d in self.hands[id]["actions"]:
+                            if (position and self.hands[id]["position"][position] == 1) or not position:
+                                _result.append(id)
                 _result = list(set(_result))
+
             else:
-                assert d in self._actions, f"Supported search keyword:\n{self._actions}"
+                if d.startswith("!"):
+                    assert d[1:] in self._actions, f"Supported search keyword:\n{self._actions}"
+                else:
+                    assert d in self._actions, f"Supported search keyword:\n{self._actions}"
                 for id in id_list:
-                    if d in self.hands[id]["actions"]:
+                    if d.startswith("!") and d[1:] not in self.hands[id]["actions"]:
+                        if (position and self.hands[id]["position"][position] == 1) or not position:
+                            _result.append(id)
+                    elif not d.startswith("!") and d in self.hands[id]["actions"]:
                         if (position and self.hands[id]["position"][position] == 1) or not position:
                              _result.append(id)
             result = _result
@@ -146,11 +158,3 @@ class Player:
         ax.set(xticks=[], yticks=[])
         tf = blended_transform_factory(plt.gca().transAxes, plt.gca().transAxes)
         plt.text(0.85, -0.05, f"{len(self.hands)} hands", fontsize=15, color='gray', transform=tf)
-
-        
-
-# proportional_deviation = self.players_profile.div(list(self.players_profile["_average_"]), axis=0)
-#         hm = sns.heatmap(proportional_deviation, annot=self.players_profile, center=1, fmt='.3f', cmap="vlag", annot_kws={'fontsize':7}, vmin=-0.1, vmax=2, cbar=False)
-#         hm.set_xticklabels(hm.get_xticklabels(), rotation=45, ha='right', fontsize=9)
-#         tf = blended_transform_factory(plt.gca().transAxes, plt.gca().transAxes)
-#         plt.text(0.85, -0.25, f"{self.__len__()} hands", fontsize=10, color='gray', transform=tf)
