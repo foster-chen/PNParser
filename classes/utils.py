@@ -122,9 +122,9 @@ def raw_attributes():
 def player_attributes():
     attributes = ["name",
                   "vpip",
-                  "pfr",
                   "af",
                   "wtsd",
+                  "pfr",
                   "three_bet",
                   "four_bet",
                   "five_bet",
@@ -142,9 +142,9 @@ def player_attributes():
 
 def player_attribute_titles():
     title = ["VPIP", 
-             "PFR", 
              "AF",
              "WTSD",
+             "PFR", 
              "3-Bet", 
              "4-Bet", 
              "5-Bet", 

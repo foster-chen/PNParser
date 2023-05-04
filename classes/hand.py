@@ -56,7 +56,8 @@ class Hand:
                     self.bet_history[0]["bet"][entry.name[0][0]] = self.ante
                 self.bet_history[0]["fold"] = []
             elif entry.descriptor in ["call", "bet", "raise"]:
-                self.vpip.append(entry.name[0][0])
+                if _stage == "preflop":
+                    self.vpip.append(entry.name[0][0])
                 self.bet_history[bet_history_index] = deepcopy(self.bet_history[bet_history_index - 1])
                 self.bet_history[bet_history_index]["fold"] = []
                 self.bet_history[bet_history_index]["stage"] = _stage

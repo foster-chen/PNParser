@@ -54,9 +54,9 @@ class Player:
     def __str__(self):
         table = [["Name", self.name],
                  ["VPIP", f"{round(self.vpip * 100, 2)}%" if self.vpip else None],
-                 ["PFR", f"{round(self.pfr * 100, 2)}%" if self.pfr else None],
                  ["AF", round(self.af, 2) if self.af else None],
                  ["WTSD", round(self.af, 2) if self.af else None], 
+                 ["PFR", f"{round(self.pfr * 100, 2)}%" if self.pfr else None],
                  ["3-Bet", f"{round(self.three_bet * 100, 2)}%" if self.three_bet else None],
                  ["4-Bet", f"{round(self.four_bet * 100, 2)}%" if self.four_bet else None],
                  ["5-Bet", f"{round(self.five_bet * 100, 2)}%" if self.five_bet else None],
@@ -119,7 +119,7 @@ class Player:
             result = _result
         return result
     
-    def hand_chart(self, hand_ids, show_frequency=False):
+    def hand_chart(self, hand_ids, show_frequency=False, title=None):
         hand_to_index = dict()
         ranks = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"]
         annotations = [[0 for _ in range(13)] for _ in range(13)]
@@ -151,10 +151,15 @@ class Player:
                 for j in range(13):
                     annotations[i][j] += f" {result[i, j]}/{base_count[i, j]}"
 
+        non_occured_hands = base_count == 0
         base_count[result == 0] = 1  # avoid DivideZeroError
+        final = result / base_count
+        final[non_occured_hands] = -0.1
 
         fig, ax = plt.subplots(figsize=(13, 10))
-        sns.heatmap(result / base_count, annot=annotations, cmap=sns.cubehelix_palette(as_cmap=True), vmin=0, vmax=1, fmt='', annot_kws={'fontsize': 10 if show_frequency else 13}, ax=ax)
+        sns.heatmap(final, annot=annotations, cmap=sns.cubehelix_palette(as_cmap=True), vmin=-0.1, vmax=1, center=0.5, fmt='', annot_kws={'fontsize': 10 if show_frequency else 13}, ax=ax)
         ax.set(xticks=[], yticks=[])
+        if title:
+            ax.set_title(title)
         tf = blended_transform_factory(plt.gca().transAxes, plt.gca().transAxes)
         plt.text(0.85, -0.05, f"{len(self.hands)} hands", fontsize=15, color='gray', transform=tf)
