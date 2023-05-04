@@ -2,6 +2,26 @@
 
 A log history parser to analyze poker strategies, hand histories, player statistics, preflop charts and much more, using the csv log file generated from [pokernow.club](https://pokernow.club/).
 
+- ### Analyze player statistics
+<p align="center">
+  <img src="resources/player_statistics.png" alt= “” width=500 height=400>
+</p>
+
+- ### Plot player action chart (e.g. preflop open chart)
+<p align="center">
+  <img src="resources/opening_hands_chart.png" alt= “” width=500 height=400>
+</p>
+
+- ### Replay hand history in stdout
+<p align="center">
+  <img src="resources/hand_history.png" alt= “” width=500 height=250>
+</p>
+
+- ### Analyze opponents
+<p align="center">
+  <img src="resources/analyze_opponents.png" alt= “” width=500 height=130>
+</p>
+
 #### See `main.ipynb` for demonstration
 
 | **Metrics** | **Definition** |
