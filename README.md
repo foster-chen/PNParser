@@ -1,6 +1,6 @@
 # See `main.ipynb` for demonstration
 
-| Metrics | Definition |
+| **Metrics** | **Definition** |
 | :--: | :-- |
 | VPIP | % of hands player voluntarily bet, raised or called preflop |
 | PFR | % of hands player raised preflop |
