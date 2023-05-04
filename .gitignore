@@ -1,3 +1,4 @@
 data/own
 .vscode
 **/__pycache__/
+dev.ipynb
