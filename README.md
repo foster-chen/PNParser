@@ -1,4 +1,8 @@
-# See `main.ipynb` for demonstration
+# PNParser
+
+A log history parser to analyze poker strategies, hand histories, player statistics, preflop charts and much more, using the csv log file generated from [pokernow.club](https://pokernow.club/).
+
+#### See `main.ipynb` for demonstration
 
 | **Metrics** | **Definition** |
 | :--: | :-- |
