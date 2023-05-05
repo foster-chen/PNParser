@@ -1,6 +1,5 @@
 data/own
 .vscode
 **/__pycache__/
-dev.ipynb
 .DS_Store
 **/DS_Store
