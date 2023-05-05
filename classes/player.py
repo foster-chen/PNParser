@@ -21,6 +21,8 @@ class Player:
             setattr(self, attribute, None)
         self.name = name
         self.hands = dict()
+        self.balance_history = []
+        self.accumulated_winnings = []
 
     def reset(self):
         self.__init__(self.name)
@@ -43,6 +45,11 @@ class Player:
         self.fold_to_double = self._divide(self._fold_to_double, self._raise_against_double + self._call_double + self._fold_to_double)
         self.fold_to_triple = self._divide(self._fold_to_triple, self._raise_against_triple + self._call_triple + self._fold_to_triple)
         self.check_raise = self._divide(self._check_raise, self._call_without_checkraise)
+        
+        if self.balance_history:
+            self.accumulated_winnings.append(self.balance_history[0])
+            for balance in self.balance_history[1:]:
+                self.accumulated_winnings.append(self.accumulated_winnings[-1] + balance)
 
     @staticmethod
     def _divide(num1, num2):
@@ -119,7 +126,7 @@ class Player:
             result = _result
         return result
     
-    def hand_chart(self, hand_ids, show_frequency=False, title=None):
+    def plot_hand_chart(self, hand_ids, show_frequency=False, title=None):
         hand_to_index = dict()
         ranks = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"]
         annotations = [[0 for _ in range(13)] for _ in range(13)]
@@ -157,7 +164,7 @@ class Player:
         final[non_occured_hands] = -0.1
 
         fig, ax = plt.subplots(figsize=(13, 10))
-        sns.heatmap(final, annot=annotations, cmap=sns.cubehelix_palette(as_cmap=True), vmin=-0.1, vmax=1, center=0.5, fmt='', annot_kws={'fontsize': 10 if show_frequency else 13}, ax=ax)
+        sns.heatmap(final, annot=annotations, cmap=sns.cubehelix_palette(as_cmap=True), vmin=-0.1, vmax=1, center=0.5, fmt='', annot_kws={'fontsize': 9 if show_frequency else 13}, ax=ax)
         ax.set(xticks=[], yticks=[])
         if title:
             ax.set_title(title)

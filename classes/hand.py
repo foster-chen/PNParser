@@ -16,7 +16,7 @@ class Hand:
 
         self._init_attributes()
         for entry in self.entries:
-            if entry.descriptor in ["SB", "BB", "fold", "call", "bet", "raise"]:
+            if entry.descriptor in ["SB", "BB", "fold", "call", "bet", "raise", "check"]:
                 if entry.name[0][0] not in self.players:
                     self.players.append(entry.name[0][0])
                     self.num_players += 1
@@ -26,7 +26,13 @@ class Hand:
         bet_history_index = 1
         stage_change = False
         for i, entry in enumerate(self.entries):
-            if entry.descriptor in ["flop", "turn", "river"]:
+            if entry.descriptor == "stack count":
+                self.starting_stacks = entry.meta
+            
+            elif entry.descriptor == "uncalled":
+                self._uncalled = {"name": entry.name[0][0], "amount": entry.meta}
+            
+            elif entry.descriptor in ["flop", "turn", "river"]:
                 _stage = entry.descriptor
                 if getattr(self, entry.descriptor)[0]:
                     getattr(self, entry.descriptor)[1] += entry.meta
@@ -48,7 +54,7 @@ class Hand:
             elif entry.descriptor == "show":
                 self.revealed_holdings[entry.name[0][0]] = entry.meta
 
-            if entry.descriptor in ["ANTE", "SB", "BB"]:
+            elif entry.descriptor in ["ANTE", "SB", "BB"]:
                 setattr(self, entry.descriptor.lower(), entry.meta)
                 if entry.descriptor in ["SB", "BB"]:
                     self.bet_history[0]["bet"][entry.name[0][0]] = getattr(self, entry.descriptor.lower()) + self.ante
@@ -80,6 +86,7 @@ class Hand:
         self._parse_bet_history()
         self._get_pot_at_stage()
         self.board = self._get_board()
+        self.stack_changes = self._calculate_stack_change()
         self.vpip = list(set(self.vpip))
     
     def _get_board(self):
@@ -345,6 +352,43 @@ class Hand:
             self.join_flop.extend([name for name, bet in self.bet_history[_preflop_end_layer]["bet"].items() if bet == preflop_bet_to_reach])
         if _river_end_layer:
             self.wtsd.extend([name for name, bet in self.bet_history[_river_end_layer]["bet"].items() if bet == river_bet_to_reach])
+
+    def _calculate_stack_change(self):
+        changes = {name: 0 for name in self.players}
+        preflop_bet = None
+        flop_bet = None
+        turn_bet = None
+        river_bet = None
+        for i, step in list(self.bet_history.items())[::-1]:
+            if step["stage"] == "preflop" and not preflop_bet:
+                preflop_bet = step["bet"]
+            elif step["stage"] == "flop" and not flop_bet:
+                flop_bet = step["bet"]
+            elif step["stage"] == "turn" and not turn_bet:
+                turn_bet = step["bet"]
+            elif step["stage"] == "river" and not river_bet:
+                river_bet = step["bet"]
+        if preflop_bet and sum(1 for num in preflop_bet.values() if num > 0) >= 2:
+            for name in preflop_bet:
+                changes[name] -= preflop_bet[name]
+        if flop_bet and sum(1 for num in flop_bet.values() if num > 0) >= 2:
+            for name in flop_bet:
+                changes[name] -= flop_bet[name]
+        if turn_bet and sum(1 for num in turn_bet.values() if num > 0) >= 2:
+            for name in turn_bet:
+                changes[name] -= turn_bet[name]
+        if river_bet and sum(1 for num in river_bet.values() if num > 0) >= 2:
+            for name in river_bet:
+                changes[name] -= river_bet[name]
+        
+        loser_changes = deepcopy(changes)
+        for winner in self.winner:
+            loser_changes.pop(winner)
+        
+        for winner in self.winner:
+            changes[winner] = int(round(-sum(list(loser_changes.values())) / len(self.winner)))
+        
+        return changes
 
     def _describe_bet_stage(self, i, name, descriptor):
         self.bet_history[i]["descriptor"] = {"name": name, "action": descriptor}

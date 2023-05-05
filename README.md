@@ -12,6 +12,11 @@ A log history parser to analyze poker strategies, hand histories, player statist
   <img src="resources/opening_hands_chart.png" alt= “” width=500 height=400>
 </p>
 
+- ### Plot accumulated player winnings
+<p align="center">
+  <img src="resources/accumulated_winnings.png" alt= “” width=500 height=400>
+</p>
+
 - ### Replay hand history in stdout
 <p align="center">
   <img src="resources/hand_history.png" alt= “” width=500 height=250>

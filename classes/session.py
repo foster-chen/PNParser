@@ -7,6 +7,7 @@ import json
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.transforms import blended_transform_factory
+sns.set_theme()
 
 class Session:
 
@@ -30,10 +31,15 @@ class Session:
             if isinstance(ent[0], str):
                 ent = [Entry(entry) for entry in ent]
             hands, admin_entries = hand_segmentor(ent, return_admin=True)
-            for hand in hands:
-                hand = Hand(hand)
-                self.hands.append(hand)
-                self._id_to_hand[hand.id] = len(self.hands) - 1
+            for i, hand in enumerate(hands):
+                try:
+                    hand = Hand(hand)
+                    self.hands.append(hand)
+                    self._id_to_hand[hand.id] = len(self.hands) - 1
+                except KeyError:
+                    print(f"\nSkipped errored hand below:")
+                    for entry in hand:
+                        print(entry)
             self.admin_entries.extend(admin_entries)
             self.init_players()
 
@@ -96,9 +102,9 @@ class Session:
         for name in self.players:
             self.players[name].update_profile()
     
-    def log_session_stats(self, reset_players=True):
+    def log_session_stats(self, reset=True):
         assert self.hands, "No hand history to update"
-        if reset_players:
+        if reset:
             for name in self.players:
                 self.players[name].reset()
         
@@ -106,15 +112,24 @@ class Session:
             self.log_hand_stats(hand)
 
     def log_hand_stats(self, hand: Hand):
+        # record own player ID
         if not self.own_id:
-            id = input("Own ID not stored. Input own user ID: ")
+            while True:
+                id = input("Own ID not stored. Input own user ID: ")
+                if id in self.players:
+                    break
+                else:
+                    print("ID not found in logs")
             self.own_id = id
         self._own_alt_ids = [key for key in self.name_map if self.name_map[key] == self.own_id]
         assert len(self._own_alt_ids) >= 1
         
+        # pass own player ID into each hand
         for name in hand.players:
             if name in self._own_alt_ids:
                 hand.own_player_id = name
+
+        # log raw stats into players in this session
         for attribute in self.hand_attributes:
             if not getattr(hand, attribute):
                 pass
@@ -136,12 +151,15 @@ class Session:
                         for att, ele in value.items():
                             self._add_to_attribute(self.players[name], f"_{att}", ele)
                             self._add_to_attribute(self.players["_average_"], f"_{att}", ele)
+
+        # record all revealed hands
         if hand.revealed_holdings:
             for name, holdings in hand.revealed_holdings.items():
                 position = [0 for _ in hand.players]
                 position[hand.players.index(name)] = 1
                 self.players[self.name_map[name]].hands[hand.id] = {"hand": holdings, "position": position, "actions": [history["descriptor"]["action"] for history in hand.bet_history.values() if history["stage"] != "end" and history["descriptor"]["name"] == name]}
         
+        # record own hand
         if hand.own_hand:
             position = [0 for _ in hand.players]
             for i, name in enumerate(hand.players):
@@ -149,10 +167,19 @@ class Session:
                     position[i] = 1
             self.players[self.own_id].hands[hand.id] = {"hand": hand.own_hand, "position": position, "actions": [history["descriptor"]["action"] for history in hand.bet_history.values() if history["stage"] != "end" and history["descriptor"]["name"] in self._own_alt_ids]}
 
+        # update _average_ dummy player
         for name in hand.players:
             self.players[self.name_map[name]].n_hands_tracked += 1
             self.players["_average_"].n_hands_tracked += 1
 
+        # track player balance
+        player_update_track = {name: False for name in self.players if name != "_average_"}
+        for name in hand.players:
+            player_update_track[self.name_map[name]] = True
+            self.players[self.name_map[name]].balance_history.append(hand.stack_changes[name])
+        for name in player_update_track:
+            if not player_update_track[name]:
+                self.players[name].balance_history.append(0)
     
     @staticmethod
     def _add_to_attribute(_class, attribute, value):
@@ -199,6 +226,31 @@ class Session:
         hm.set_xticklabels(hm.get_xticklabels(), rotation=45, ha='right', fontsize=9)
         tf = blended_transform_factory(plt.gca().transAxes, plt.gca().transAxes)
         plt.text(0.85, -0.25, f"{self.__len__()} hands", fontsize=10, color='gray', transform=tf)
+
+    def plot_winnings(self, include=None, exclude=None):
+        assert not (include and exclude), "Both inclusion and exclusion set"
+        if include:
+            assert isinstance(include, list) or isinstance(include, str)
+            include = include if isinstance(include, list) else [include]
+            players = []
+            for name in include:
+                assert name in [name for name in self.players if name != "_average_"], f"ID {name} not found in session. Session players: {[player for player in self.players if player != '_average_'] }"
+                players.append(name)
+        else:
+            players = [name for name in self.players if name != "_average_"]
+        if exclude:
+            assert isinstance(exclude, list) or isinstance(exclude, str)
+            exclude = exclude if isinstance(exclude, list) else [exclude]
+            for name in exclude:
+                assert name in players, f"ID {name} not found in session. Session players: {[player for player in self.players if player != '_average_'] }"
+                players.remove(name)  
+        winnings = {player: self.players[player].accumulated_winnings for player in players}
+        winnings_df = pd.DataFrame(winnings, index=list(range(len(self))))
+        fig, ax = plt.subplots(figsize=(13, 10))
+        sns.lineplot(data=winnings_df, palette="tab10", ax=ax, linewidth=2.5, dashes=False)
+        ax.axhline(y=0, color='black', linestyle='--', alpha=0.5)
+        ax.set_ylabel("Net Stack Change")
+        ax.set_xlabel("Hands")
     
     def find_hands(self, *descriptor):
         result = list()
