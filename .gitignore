@@ -3,3 +3,4 @@ data/own
 **/__pycache__/
 dev.ipynb
 .DS_Store
+**/DS_Store
