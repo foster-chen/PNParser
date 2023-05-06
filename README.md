@@ -2,6 +2,8 @@
 
 A log history parser to analyze poker strategies, hand histories, player statistics, preflop charts and much more, using the csv log file generated from [pokernow.club](https://pokernow.club/).
 
+## Features
+
 - ### Analyze player statistics
 <p align="center">
   <img src="resources/player_statistics.png" alt= “” width=500 height=400>
@@ -48,3 +50,19 @@ A log history parser to analyze poker strategies, hand histories, player statist
 | F-2Ba| % of hands player folded when facing a double-barrel |
 | F-3Ba | % of hands player folded when facing a triple-barrel |
 | Trap | Raises / Calls when given the oppotunity to check-raise |
+
+## Installation
+
+1. Make sure Python >= 3.8 is installed
+
+2. Download the code by pressing "<> Code" on the top right -> "Download ZIP" and uncompress at desired direcotory (or if you have git: `git clone https://github.com/foster-chen/PNParser.git`)
+
+3. Open the system terminal and navigate to the root directory by typing the command below, substitute with your actual directory
+```bash
+cd \your\directory\PNParser
+```
+
+4. Install the dependencies:
+```bash
+python -m pip install -r requirements.txt
+```
